@@ -20,8 +20,16 @@ nuvolo-sync repository (``docs/dbus.rst``).
 * State lookups use a 300 ms timeout and ``NO_AUTO_START``, because Nautilus calls them on
   its UI thread.
 * When Nuvolo emits ``StatesChanged``, the extension drops the cached states for those paths
-  and their parent folders. It then asks Nautilus to refresh those files, which updates
-  the emblems.
+  and their parent folders. In a later main-loop iteration it asks Nautilus to refresh
+  those files, which updates the emblems. Nautilus answers a refresh by calling back into
+  the extension immediately, so the refresh must never happen while a cache is in use.
+
+Crash safety
+------------
+
+Every function Nautilus or GLib can call runs inside ``guard()``, which catches a Rust panic
+and logs it. A panic that reaches C aborts the whole GNOME Files process, so a bug in the
+extension now costs at most a missing emblem or menu.
 
 Emblems
 -------

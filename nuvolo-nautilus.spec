@@ -1,7 +1,7 @@
 %global debug_package %{nil}
 
 Name:           nuvolo-nautilus
-Version:        0.1.0
+Version:        0.1.1
 Release:        1%{?dist}
 Summary:        GNOME Files extension for Nuvolo
 License:        GPL-3.0-or-later
@@ -37,5 +37,10 @@ make install DESTDIR=%{buildroot} EXTDIR=%{_libdir}/nautilus/extensions-4 ICONDI
 %{_datadir}/icons/hicolor/scalable/emblems/emblem-nuvolo-*.svg
 
 %changelog
+* Wed Nov 18 2026 Thanapong Chuangyanyong - 0.1.1-1
+- Fix GNOME Files crashing on file open and on Nuvolo menu actions
+- Catch panics at every callback so the extension cannot abort GNOME Files
+- Emblem for partly offline folders
+
 * Wed Nov 18 2026 Thanapong Chuangyanyong - 0.1.0-1
 - First package
