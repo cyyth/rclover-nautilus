@@ -56,6 +56,10 @@ unsafe impl<T: InfoProviderImpl> IsImplementable<T> for InfoProvider {
 }
 
 unsafe extern "C" fn get_file_items<T: MenuProviderImpl>(provider: *mut ffi::NautilusMenuProvider, files: *mut glib::ffi::GList) -> *mut glib::ffi::GList {
+    crate::guard(ptr::null_mut(), || file_items_list::<T>(provider, files))
+}
+
+unsafe fn file_items_list<T: MenuProviderImpl>(provider: *mut ffi::NautilusMenuProvider, files: *mut glib::ffi::GList) -> *mut glib::ffi::GList {
     let imp = (*(provider as *mut T::Instance)).imp();
     let mut infos = Vec::new();
     let mut l = files;
@@ -78,7 +82,7 @@ unsafe extern "C" fn update_file_info<T: InfoProviderImpl>(
     _update_complete: *mut glib::gobject_ffi::GClosure,
     _handle: *mut *mut ffi::NautilusOperationHandle,
 ) -> std::os::raw::c_int {
-    (*(provider as *mut T::Instance)).imp().update_file_info(&FileInfo(file));
+    crate::guard((), || (*(provider as *mut T::Instance)).imp().update_file_info(&FileInfo(file)));
     ffi::NAUTILUS_OPERATION_COMPLETE
 }
 
@@ -87,7 +91,7 @@ fn menu_item(name: &str, label: &str, on_activate: impl Fn() + 'static) -> glib:
     // SAFETY: nautilus_menu_item_new returns a new reference.
     let item: glib::Object = unsafe { from_glib_full(ffi::nautilus_menu_item_new(n.as_ptr(), l.as_ptr(), ptr::null(), ptr::null()).cast::<glib::gobject_ffi::GObject>()) };
     item.connect_local("activate", false, move |_| {
-        on_activate();
+        crate::guard((), &on_activate);
         None
     });
     item
@@ -99,6 +103,7 @@ fn emblem(state: &str) -> Option<&'static str> {
         "cached" => "nuvolo-cached",
         "pinned" => "nuvolo-pinned",
         "syncing" => "nuvolo-syncing",
+        "partial" => "nuvolo-partial",
         "error" => "nuvolo-error",
         _ => return None,
     })

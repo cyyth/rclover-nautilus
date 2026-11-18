@@ -37,7 +37,7 @@ impl Daemon {
         if let Some(c) = &conn {
             c.signal_subscribe(Some(BUS), Some(IFACE), Some("StatesChanged"), Some(PATH), None, gio::DBusSignalFlags::NONE, |_, _, _, _, _, params| {
                 let paths = params.get::<(Vec<String>,)>().map(|t| t.0).unwrap_or_default();
-                with(|d| d.invalidate(&paths));
+                crate::guard((), || with(|d| d.invalidate(&paths)));
             });
         }
         Daemon { conn, mounts: RefCell::new((None, Vec::new())), dirs: RefCell::new(HashMap::new()) }
@@ -53,7 +53,7 @@ impl Daemon {
 
     /// Whether `path` is inside a Nuvolo mount. The mount list is cached for 30 s.
     pub fn inside(&self, path: &Path) -> bool {
-        let mut m = self.mounts.borrow_mut();
+        let Ok(mut m) = self.mounts.try_borrow_mut() else { return false };
         if m.0.is_none_or(|t| t.elapsed() > MOUNTS_TTL) {
             m.1 = self
                 .query("GetMounts", &().to_variant())
@@ -72,7 +72,7 @@ impl Daemon {
         }
         let dir = path.parent()?.to_path_buf();
         let key = path.to_string_lossy().into_owned();
-        if let Some((t, states)) = self.dirs.borrow().get(&dir) {
+        if let Some((t, states)) = self.dirs.try_borrow().ok()?.get(&dir) {
             if t.elapsed() < DIR_TTL {
                 return states.get(&key).cloned();
             }
@@ -82,7 +82,9 @@ impl Daemon {
             .and_then(|v| v.get::<(HashMap<String, String>,)>())
             .map(|t| t.0)?;
         let found = states.get(&key).cloned();
-        self.dirs.borrow_mut().insert(dir, (Instant::now(), states));
+        if let Ok(mut dirs) = self.dirs.try_borrow_mut() {
+            dirs.insert(dir, (Instant::now(), states));
+        }
         found
     }
 
@@ -109,7 +111,7 @@ impl Daemon {
         let Some(c) = &self.conn else { return };
         c.call(Some(BUS), PATH, IFACE, method, Some(&(path,).to_variant()), None, gio::DBusCallFlags::NONE, 30_000, None::<&gio::Cancellable>, move |res| {
             match res.map(|v| v.get::<(String,)>()) {
-                Ok(Some((url,))) => done(url),
+                Ok(Some((url,))) => crate::guard((), move || done(url)),
                 Ok(None) => eprintln!("nuvolo-nautilus: unexpected reply"),
                 Err(e) => eprintln!("nuvolo-nautilus: {e}"),
             }
@@ -117,18 +119,30 @@ impl Daemon {
     }
 
     /// Drops cached states for `paths` and their ancestors and tells Nautilus to ask again.
+    ///
+    /// Nautilus answers an invalidation by calling `update_file_info` right away, which reads
+    /// the caches. So the caches are updated and released first, and Nautilus is told in a
+    /// later main-loop iteration, never while this extension is in the middle of a call.
     fn invalidate(&self, paths: &[String]) {
-        let mut dirs = self.dirs.borrow_mut();
-        for p in paths {
-            for a in Path::new(p).ancestors() {
-                if !self.mounts.borrow().1.iter().any(|root| a.starts_with(root)) {
-                    break;
+        let roots = self.mounts.borrow().1.clone();
+        let mut uris = Vec::new();
+        {
+            let mut dirs = self.dirs.borrow_mut();
+            for p in paths {
+                for a in Path::new(p).ancestors().take_while(|a| roots.iter().any(|r| a.starts_with(r))) {
+                    dirs.remove(a);
+                    if let Some(parent) = a.parent() {
+                        dirs.remove(parent);
+                    }
+                    uris.push(gio::File::for_path(a).uri().to_string());
                 }
-                dirs.remove(a);
-                if let Some(parent) = a.parent() {
-                    dirs.remove(parent);
-                }
-                let Ok(uri) = CString::new(gio::File::for_path(a).uri().as_str()) else { continue };
+            }
+        }
+        uris.sort();
+        uris.dedup();
+        glib::idle_add_local_once(move || {
+            for uri in uris {
+                let Ok(uri) = CString::new(uri) else { continue };
                 // SAFETY: lookup returns a new reference (or NULL), released below.
                 unsafe {
                     let fi = ffi::nautilus_file_info_lookup_for_uri(uri.as_ptr());
@@ -138,6 +152,34 @@ impl Daemon {
                     }
                 }
             }
-        }
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn offline() -> Daemon {
+        // A daemon that believes /mnt/cloud is a mount and has no bus (queries return None).
+        let d = Daemon { conn: None, mounts: RefCell::new((Some(Instant::now()), vec![PathBuf::from("/mnt/cloud")])), dirs: RefCell::new(HashMap::new()) };
+        let states = HashMap::from([("/mnt/cloud/a.txt".to_owned(), "cached".to_owned())]);
+        d.dirs.borrow_mut().insert(PathBuf::from("/mnt/cloud"), (Instant::now(), states));
+        d
+    }
+
+    #[test]
+    fn state_lookup_while_cache_is_borrowed_does_not_panic() {
+        // This is the re-entrant call that used to abort GNOME Files.
+        let d = offline();
+        let _held = d.dirs.borrow_mut();
+        assert_eq!(d.state(Path::new("/mnt/cloud/a.txt")), None);
+    }
+
+    #[test]
+    fn state_comes_from_the_directory_cache() {
+        let d = offline();
+        assert_eq!(d.state(Path::new("/mnt/cloud/a.txt")).as_deref(), Some("cached"));
+        assert_eq!(d.state(Path::new("/elsewhere/a.txt")), None);
     }
 }

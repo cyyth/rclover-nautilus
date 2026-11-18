@@ -9,6 +9,7 @@ Inside a Nuvolo mount, each file and folder shows one emblem:
 =============  ======================================================
 Cloud          Only in the cloud. Uses no disk space until opened.
 Check (green)  Cached on this device.
+Half (purple)  A folder with some of its content on this device.
 Pin (purple)   Always kept on this device.
 Sync (blue)    Uploading or downloading now.
 Warning        The last transfer failed.
