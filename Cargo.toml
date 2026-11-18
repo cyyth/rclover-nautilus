@@ -1,0 +1,19 @@
+[package]
+name = "nuvolo-nautilus"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.84"
+license = "GPL-3.0-or-later"
+description = "GNOME Files extension for Nuvolo: sync emblems and a Nuvolo context menu"
+repository = "https://github.com/cyythanapong-netizen/nuvolo-nautilus"
+resolver = "3"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+gio = "0.20"
+gdk = { package = "gdk4", version = "0.9" }
+
+[build-dependencies]
+pkg-config = "0.3"

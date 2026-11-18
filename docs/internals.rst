@@ -1,0 +1,31 @@
+Internals
+=========
+
+Nautilus loads extensions as C shared libraries. This one is a Rust ``cdylib`` that exports
+the three module entry points (``nautilus_module_initialize``, ``nautilus_module_list_types``
+and ``nautilus_module_shutdown``). It registers one GObject type that implements
+``NautilusMenuProvider`` and ``NautilusInfoProvider``.
+
+There are no maintained Rust bindings for libnautilus-extension-4, so the few functions and
+interface structs it needs are declared by hand in ``src/ffi.rs``.
+
+Talking to Nuvolo
+-----------------
+
+All state comes from the Nuvolo app over D-Bus. The interface is documented in the
+nuvolo-sync repository (``docs/dbus.rst``).
+
+* The list of mount points is cached for 30 seconds.
+* States are fetched with ``GetDirStates``, once per folder, and cached for 60 seconds.
+* State lookups use a 300 ms timeout and ``NO_AUTO_START``, because Nautilus calls them on
+  its UI thread.
+* When Nuvolo emits ``StatesChanged``, the extension drops the cached states for those paths
+  and their parent folders. It then asks Nautilus to refresh those files, which updates
+  the emblems.
+
+Emblems
+-------
+
+``nautilus_file_info_add_emblem("nuvolo-pinned")`` makes Nautilus show the icon
+``emblem-nuvolo-pinned``. The SVGs in ``icons/`` are installed into the hicolor theme's
+``emblems`` folder.
