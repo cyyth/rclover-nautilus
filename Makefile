@@ -8,7 +8,6 @@ build:
 install:
 	install -Dm755 target/release/libnuvolo_nautilus.so $(DESTDIR)$(EXTDIR)/libnuvolo-nautilus.so
 	install -Dm644 -t $(DESTDIR)$(ICONDIR) icons/*.svg
-	-gtk4-update-icon-cache -q -t -f $(DESTDIR)/usr/share/icons/hicolor
 	@echo "Restart GNOME Files with: nautilus -q"
 
 uninstall:
