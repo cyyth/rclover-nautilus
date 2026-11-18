@@ -12,6 +12,7 @@ BuildRequires:  cargo
 BuildRequires:  rust
 BuildRequires:  make
 BuildRequires:  pkgconfig(libnautilus-extension-4)
+BuildRequires:  pkgconfig(gtk4)
 Requires:       nautilus
 Requires:       nuvolo
 
