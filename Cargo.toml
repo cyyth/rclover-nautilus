@@ -9,7 +9,7 @@ repository = "https://github.com/cyythanapong-netizen/nuvolo-nautilus"
 resolver = "3"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 gio = "0.20"
