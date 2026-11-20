@@ -1,6 +1,6 @@
 //! Hand-written bindings for the parts of libnautilus-extension-4 this extension uses.
 
-use gio::glib::ffi::{GList, GType};
+use gio::glib::ffi::{gboolean, GList, GType};
 use gio::glib::gobject_ffi::{GClosure, GTypeInterface};
 use std::os::raw::{c_char, c_int};
 
@@ -48,11 +48,20 @@ pub struct NautilusInfoProviderInterface {
 }
 
 pub const NAUTILUS_OPERATION_COMPLETE: c_int = 0;
+pub const NAUTILUS_OPERATION_FAILED: c_int = 1;
+pub const NAUTILUS_OPERATION_IN_PROGRESS: c_int = 2;
 
 extern "C" {
     pub fn nautilus_menu_provider_get_type() -> GType;
     pub fn nautilus_info_provider_get_type() -> GType;
+    pub fn nautilus_info_provider_update_complete_invoke(
+        update_complete: *mut GClosure,
+        provider: *mut NautilusInfoProvider,
+        handle: *mut NautilusOperationHandle,
+        result: c_int,
+    );
     pub fn nautilus_file_info_get_location(file: *mut NautilusFileInfo) -> *mut gio::ffi::GFile;
+    pub fn nautilus_file_info_is_directory(file: *mut NautilusFileInfo) -> gboolean;
     pub fn nautilus_file_info_add_emblem(file: *mut NautilusFileInfo, emblem_name: *const c_char);
     pub fn nautilus_file_info_invalidate_extension_info(file: *mut NautilusFileInfo);
     pub fn nautilus_file_info_lookup_for_uri(uri: *const c_char) -> *mut NautilusFileInfo;

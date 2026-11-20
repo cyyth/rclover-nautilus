@@ -27,9 +27,9 @@ impl FileInfo {
         f.path()
     }
 
-    pub fn add_emblem(&self, name: &str) {
-        let n = CString::new(name).expect("emblem name has no NUL");
-        unsafe { ffi::nautilus_file_info_add_emblem(self.0, n.as_ptr()) }
+    pub fn is_directory(&self) -> bool {
+        // SAFETY: `self.0` is valid for the duration of the callback.
+        unsafe { ffi::nautilus_file_info_is_directory(self.0) != 0 }
     }
 }
 
@@ -37,9 +37,7 @@ pub trait MenuProviderImpl: ObjectImpl {
     fn file_items(&self, files: &[FileInfo]) -> Vec<glib::Object>;
 }
 
-pub trait InfoProviderImpl: ObjectImpl {
-    fn update_file_info(&self, file: &FileInfo);
-}
+pub trait InfoProviderImpl: ObjectImpl {}
 
 unsafe impl<T: MenuProviderImpl> IsImplementable<T> for MenuProvider {
     fn interface_init(iface: &mut glib::Interface<Self>) {
@@ -51,7 +49,8 @@ unsafe impl<T: MenuProviderImpl> IsImplementable<T> for MenuProvider {
 unsafe impl<T: InfoProviderImpl> IsImplementable<T> for InfoProvider {
     fn interface_init(iface: &mut glib::Interface<Self>) {
         let iface = iface.as_mut();
-        iface.update_file_info = Some(update_file_info::<T>);
+        iface.update_file_info = Some(update_file_info);
+        iface.cancel_update = Some(cancel_update);
     }
 }
 
@@ -76,14 +75,35 @@ unsafe fn file_items_list<T: MenuProviderImpl>(provider: *mut ffi::NautilusMenuP
     out
 }
 
-unsafe extern "C" fn update_file_info<T: InfoProviderImpl>(
+unsafe extern "C" fn update_file_info(
     provider: *mut ffi::NautilusInfoProvider,
     file: *mut ffi::NautilusFileInfo,
-    _update_complete: *mut glib::gobject_ffi::GClosure,
-    _handle: *mut *mut ffi::NautilusOperationHandle,
+    update_complete: *mut glib::gobject_ffi::GClosure,
+    handle: *mut *mut ffi::NautilusOperationHandle,
 ) -> std::os::raw::c_int {
-    crate::guard((), || (*(provider as *mut T::Instance)).imp().update_file_info(&FileInfo(file)));
-    ffi::NAUTILUS_OPERATION_COMPLETE
+    crate::guard(ffi::NAUTILUS_OPERATION_COMPLETE, || {
+        let info = FileInfo(file);
+        let Some(path) = info.path() else {
+            return ffi::NAUTILUS_OPERATION_COMPLETE;
+        };
+        let is_dir = info.is_directory();
+        if let Some(id) = daemon::with(|d| d.request_info(provider, file, update_complete, path, is_dir)) {
+            if !handle.is_null() {
+                *handle = id as *mut ffi::NautilusOperationHandle;
+            }
+            ffi::NAUTILUS_OPERATION_IN_PROGRESS
+        } else {
+            ffi::NAUTILUS_OPERATION_COMPLETE
+        }
+    })
+}
+
+unsafe extern "C" fn cancel_update(_provider: *mut ffi::NautilusInfoProvider, handle: *mut ffi::NautilusOperationHandle) {
+    crate::guard((), || {
+        if !handle.is_null() {
+            daemon::with(|d| d.cancel_op(handle as usize));
+        }
+    });
 }
 
 fn menu_item(name: &str, label: &str, on_activate: impl Fn() + 'static) -> glib::Object {
@@ -97,7 +117,7 @@ fn menu_item(name: &str, label: &str, on_activate: impl Fn() + 'static) -> glib:
     item
 }
 
-fn emblem(state: &str) -> Option<&'static str> {
+pub(crate) fn emblem(state: &str) -> Option<&'static str> {
     Some(match state {
         "cloud" => "nuvolo-cloud",
         "cached" => "nuvolo-cached",
@@ -125,14 +145,7 @@ mod imp {
 
     impl ObjectImpl for Provider {}
 
-    impl InfoProviderImpl for Provider {
-        fn update_file_info(&self, file: &FileInfo) {
-            let Some(path) = file.path() else { return };
-            if let Some(e) = daemon::with(|d| d.state(&path)).as_deref().and_then(emblem) {
-                file.add_emblem(e);
-            }
-        }
-    }
+    impl InfoProviderImpl for Provider {}
 
     impl MenuProviderImpl for Provider {
         fn file_items(&self, files: &[FileInfo]) -> Vec<glib::Object> {
@@ -142,7 +155,7 @@ mod imp {
             }
             let states = daemon::with(|d| d.states(&paths));
             let all_pinned = paths.iter().all(|p| states.get(p).is_some_and(|s| s == "pinned"));
-            let is_dir = paths.len() == 1 && Path::new(&paths[0]).is_dir();
+            let is_dir = files.len() == 1 && files[0].is_directory();
 
             let act = |method: &'static str| {
                 let paths = paths.clone();

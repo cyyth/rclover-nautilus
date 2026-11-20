@@ -15,10 +15,15 @@ Talking to Nuvolo
 All state comes from the Nuvolo app over D-Bus. The interface is documented in the
 nuvolo-sync repository (``docs/dbus.rst``).
 
-* The list of mount points is cached for 30 seconds.
-* States are fetched with ``GetDirStates``, once per folder, and cached for 60 seconds.
-* State lookups use a 300 ms timeout and ``NO_AUTO_START``, because Nautilus calls them on
-  its UI thread.
+* The list of mount points is fetched asynchronously and cached for 30 seconds (failed
+  lookups are not cached for 30 seconds, so a slow startup recovers within seconds).
+* ``update_file_info()`` never blocks Nautilus's UI thread. On a cache hit it applies the
+  emblem immediately; on a miss it returns ``NAUTILUS_OPERATION_IN_PROGRESS``, batches the
+  visible entries' ``(path, is_directory)`` pairs in an idle callback, calls
+  ``GetStatesWithTypes`` asynchronously (falling back to ``GetDirStates`` on older Nuvolo
+  versions), and finishes each request with ``nautilus_info_provider_update_complete_invoke``.
+* Timed-out or failed lookups are retried with a short backoff and re-invalidate the
+  affected files so emblems appear without a manual refresh.
 * When Nuvolo emits ``StatesChanged``, the extension drops the cached states for those paths
   and their parent folders. In a later main-loop iteration it asks Nautilus to refresh
   those files, which updates the emblems. Nautilus answers a refresh by calling back into
