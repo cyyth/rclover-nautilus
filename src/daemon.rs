@@ -75,8 +75,10 @@ impl PendingOp {
     ) -> Self {
         glib::gobject_ffi::g_object_ref(provider.cast());
         glib::gobject_ffi::g_object_ref(file.cast());
+        // Never call g_closure_sink(): Nautilus owns the floating reference and unrefs it
+        // after update_complete_invoke / cancel_update. Taking an ordinary ref keeps it alive
+        // until our Drop runs without stealing Nautilus's reference.
         glib::gobject_ffi::g_closure_ref(closure);
-        glib::gobject_ffi::g_closure_sink(closure);
         Self { id, provider, file, closure, path, is_dir }
     }
 
@@ -667,5 +669,21 @@ mod tests {
         assert!(cache.roots_if_fresh().is_none(), "unknown mounts must trigger a fresh lookup");
         let absent = MountCache::Absent(Instant::now() - Duration::from_secs(5));
         assert!(absent.roots_if_fresh().is_none(), "absent daemon cache expires quickly");
+    }
+
+    #[test]
+    fn ref_without_sink_preserves_caller_floating_closure_ref() {
+        // Simulates Nautilus passing a floating GClosure, our extension taking a ref, Nautilus
+        // unreffing its own ref on completion, and our Drop releasing our ref cleanly.
+        unsafe {
+            // C's sizeof(GClosure) is 32 bytes on 64-bit; 64 is safely >= sizeof(GClosure).
+            let c = glib::gobject_ffi::g_closure_new_simple(64, std::ptr::null_mut());
+            assert!(!c.is_null(), "g_closure_new_simple must allocate a GClosure");
+            glib::gobject_ffi::g_closure_ref(c);
+            // Caller (Nautilus) releases its ref:
+            glib::gobject_ffi::g_closure_unref(c);
+            // Extension releases its ref:
+            glib::gobject_ffi::g_closure_unref(c);
+        }
     }
 }
