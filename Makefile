@@ -5,6 +5,9 @@ ICONDIR ?= /usr/share/icons/hicolor/scalable/emblems
 build:
 	cargo build --release
 
+test:
+	cargo test
+
 install:
 	install -Dm755 target/release/libnuvolo_nautilus.so $(DESTDIR)$(EXTDIR)/libnuvolo-nautilus.so
 	install -Dm644 -t $(DESTDIR)$(ICONDIR) icons/*.svg
@@ -16,4 +19,4 @@ uninstall:
 docs:
 	sphinx-build -W -b html docs docs/_build/html
 
-.PHONY: build install uninstall docs
+.PHONY: build test install uninstall docs
