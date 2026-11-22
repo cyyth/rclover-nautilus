@@ -4,7 +4,7 @@ use crate::{daemon, ffi};
 use gdk::prelude::*;
 use gio::glib::{self, subclass::prelude::*, translate::*};
 use std::ffi::CString;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::ptr;
 
 glib::wrapper! {
@@ -149,8 +149,9 @@ mod imp {
 
     impl MenuProviderImpl for Provider {
         fn file_items(&self, files: &[FileInfo]) -> Vec<glib::Object> {
-            let paths: Vec<String> = files.iter().filter_map(|f| f.path()).map(|p| p.to_string_lossy().into_owned()).collect();
-            if paths.is_empty() || paths.len() != files.len() || !daemon::with(|d| paths.iter().all(|p| d.inside(Path::new(p)))) {
+            // Real paths in the drive, also for files shown through a link (~/Documents).
+            let paths: Vec<String> = daemon::with(|d| files.iter().filter_map(|f| d.real(&f.path()?)).map(|p| p.to_string_lossy().into_owned()).collect());
+            if paths.is_empty() || paths.len() != files.len() {
                 return Vec::new();
             }
             let states = daemon::with(|d| d.states(&paths));
