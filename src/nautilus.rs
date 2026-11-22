@@ -1,4 +1,4 @@
-//! GObject glue: the Nautilus provider interfaces and the Nuvolo provider that implements them.
+//! GObject glue: the Nautilus provider interfaces and the rclover provider that implements them.
 
 use crate::{daemon, ffi};
 use gdk::prelude::*;
@@ -119,12 +119,12 @@ fn menu_item(name: &str, label: &str, on_activate: impl Fn() + 'static) -> glib:
 
 pub(crate) fn emblem(state: &str) -> Option<&'static str> {
     Some(match state {
-        "cloud" => "nuvolo-cloud",
-        "cached" => "nuvolo-cached",
-        "pinned" => "nuvolo-pinned",
-        "syncing" => "nuvolo-syncing",
-        "partial" => "nuvolo-partial",
-        "error" => "nuvolo-error",
+        "cloud" => "rclover-cloud",
+        "cached" => "rclover-cached",
+        "pinned" => "rclover-pinned",
+        "syncing" => "rclover-syncing",
+        "partial" => "rclover-partial",
+        "error" => "rclover-error",
         _ => return None,
     })
 }
@@ -137,7 +137,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for Provider {
-        const NAME: &'static str = "NuvoloNautilusProvider";
+        const NAME: &'static str = "RcloverNautilusProvider";
         type Type = super::Provider;
         type ParentType = glib::Object;
         type Interfaces = (MenuProvider, InfoProvider);
@@ -163,16 +163,16 @@ mod imp {
             };
             let mut sub = vec![
                 if all_pinned {
-                    menu_item("Nuvolo::unpin", "Stop Keeping on Device", act("Unpin"))
+                    menu_item("Rclover::unpin", "Stop Keeping on Device", act("Unpin"))
                 } else {
-                    menu_item("Nuvolo::pin", "Always Keep on Device", act("Pin"))
+                    menu_item("Rclover::pin", "Always Keep on Device", act("Pin"))
                 },
-                menu_item("Nuvolo::free", "Free Local Cache", act("Unpin")),
-                menu_item("Nuvolo::sync", if is_dir { "Sync Folder Now" } else { "Sync Now" }, act("SyncNow")),
+                menu_item("Rclover::free", "Free Local Cache", act("Unpin")),
+                menu_item("Rclover::sync", if is_dir { "Sync Folder Now" } else { "Sync Now" }, act("SyncNow")),
             ];
             if let [path] = paths.as_slice() {
                 let p = path.clone();
-                sub.push(menu_item("Nuvolo::link", "Copy Share Link", move || {
+                sub.push(menu_item("Rclover::link", "Copy Share Link", move || {
                     daemon::with(|d| {
                         d.url("GetShareLink", p.clone(), |url| {
                             if let Some(display) = gdk::Display::default() {
@@ -182,18 +182,18 @@ mod imp {
                     })
                 }));
                 let p = path.clone();
-                sub.push(menu_item("Nuvolo::web", "Open in Browser", move || {
+                sub.push(menu_item("Rclover::web", "Open in Browser", move || {
                     daemon::with(|d| {
                         d.url("GetWebUrl", p.clone(), |url| {
                             if let Err(e) = gio::AppInfo::launch_default_for_uri(&url, None::<&gio::AppLaunchContext>) {
-                                eprintln!("nuvolo-nautilus: {e}");
+                                eprintln!("rclover-nautilus: {e}");
                             }
                         })
                     })
                 }));
             }
 
-            let top = menu_item("Nuvolo::top", "Nuvolo", || {});
+            let top = menu_item("Rclover::top", "rclover", || {});
             // SAFETY: menu_new returns a new reference; append and set_submenu take their own.
             unsafe {
                 let menu: glib::Object = from_glib_full(ffi::nautilus_menu_new().cast::<glib::gobject_ffi::GObject>());

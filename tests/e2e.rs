@@ -1,11 +1,11 @@
-//! End-to-end test for `nuvolo-nautilus` against a live mock `Nuvolo1` D-Bus service on an
+//! End-to-end test for `rclover-nautilus` against a live mock `Rclover1` D-Bus service on an
 //! isolated private `dbus-run-session` bus.
 //!
 //! Exercises the real exported C ABI (`nautilus_module_initialize`, `nautilus_module_list_types`,
 //! `NautilusInfoProvider::update_file_info` and `cancel_update`) with a `GObject` implementing
 //! `NautilusFileInfoInterface` and real floating `GClosure` callbacks, verifying:
 //! 1. Non-blocking async lookup (`NAUTILUS_OPERATION_IN_PROGRESS` -> `NAUTILUS_OPERATION_COMPLETE`)
-//!    via `GetMounts` + batched `GetStatesWithTypes`, adding `"nuvolo-pinned"` without
+//!    via `GetMounts` + batched `GetStatesWithTypes`, adding `"rclover-pinned"` without
 //!    double-freeing the floating closure.
 //! 2. Immediate synchronous cache hit (`NAUTILUS_OPERATION_COMPLETE`) on the second query.
 //! 3. Safe `cancel_update` without invoking the completion callback or double-freeing.
@@ -21,9 +21,9 @@ use std::process::{Command, Stdio};
 use std::ptr;
 use std::rc::Rc;
 
-const BUS: &str = "io.github.cyythanapong_netizen.Nuvolo";
-const OBJ_PATH: &str = "/io/github/cyythanapong_netizen/Nuvolo";
-const IFACE: &str = "io.github.cyythanapong_netizen.Nuvolo1";
+const BUS: &str = "io.github.cyythanapong_netizen.Rclover";
+const OBJ_PATH: &str = "/io/github/cyythanapong_netizen/Rclover";
+const IFACE: &str = "io.github.cyythanapong_netizen.Rclover1";
 
 const NAUTILUS_OPERATION_COMPLETE: c_int = 0;
 const NAUTILUS_OPERATION_IN_PROGRESS: c_int = 2;
@@ -42,7 +42,7 @@ const DBUS_CONF: &str = r#"<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus
 "#;
 
 const XML: &str = r#"<node>
-  <interface name="io.github.cyythanapong_netizen.Nuvolo1">
+  <interface name="io.github.cyythanapong_netizen.Rclover1">
     <method name="GetMounts"><arg type="as" direction="out"/></method>
     <method name="GetStates"><arg name="paths" type="as" direction="in"/><arg type="a{ss}" direction="out"/></method>
     <method name="GetStatesWithTypes"><arg name="entries" type="a(sb)" direction="in"/><arg type="a{ss}" direction="out"/></method>
@@ -166,7 +166,7 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for FakeFile {
-        const NAME: &'static str = "NuvoloTestFakeFile";
+        const NAME: &'static str = "RcloverTestFakeFile";
         type Type = super::FakeFile;
         type ParentType = glib::Object;
         type Interfaces = (FileInfoIface,);
@@ -254,8 +254,8 @@ fn e2e_async_emblems_cache_cancel_and_invalidation() {
         return;
     }
 
-    if std::env::var_os("NUVOLO_NAUTILUS_E2E_CHILD").is_none() {
-        let dbus_conf = std::env::temp_dir().join(format!("nuvolo-nautilus-e2e-dbus-{}.conf", std::process::id()));
+    if std::env::var_os("RCLOVER_NAUTILUS_E2E_CHILD").is_none() {
+        let dbus_conf = std::env::temp_dir().join(format!("rclover-nautilus-e2e-dbus-{}.conf", std::process::id()));
         std::fs::write(&dbus_conf, DBUS_CONF).unwrap();
         let exe = std::env::current_exe().expect("current_exe");
         let status = Command::new("dbus-run-session")
@@ -264,7 +264,7 @@ fn e2e_async_emblems_cache_cancel_and_invalidation() {
             .arg("--")
             .arg(exe)
             .args(["--exact", "e2e_async_emblems_cache_cancel_and_invalidation", "--nocapture"])
-            .env("NUVOLO_NAUTILUS_E2E_CHILD", "1")
+            .env("RCLOVER_NAUTILUS_E2E_CHILD", "1")
             .env("GIO_USE_VFS", "local")
             .status()
             .expect("launch dbus-run-session");
@@ -291,7 +291,7 @@ fn e2e_async_emblems_cache_cancel_and_invalidation() {
         .expect("RequestName");
     assert_eq!(own_reply.get::<(u32,)>(), Some((1,)), "must become primary owner of {BUS}");
 
-    let mount_dir = "/tmp/nuvolo-nautilus-e2e-mount";
+    let mount_dir = "/tmp/rclover-nautilus-e2e-mount";
     let file_a = format!("{mount_dir}/pinned.txt");
     let file_b = format!("{mount_dir}/cancelled.txt");
 
@@ -320,14 +320,14 @@ fn e2e_async_emblems_cache_cancel_and_invalidation() {
             _ => inv.return_dbus_error("org.freedesktop.DBus.Error.UnknownMethod", method),
         })
         .build()
-        .expect("register mock Nuvolo1 object");
+        .expect("register mock Rclover1 object");
 
     // Initialize the real extension via its exported C module ABI.
     unsafe { nautilus_file_info_getter = Some(test_file_info_getter) };
-    nuvolo_nautilus::nautilus_module_initialize(ptr::null_mut());
+    rclover_nautilus::nautilus_module_initialize(ptr::null_mut());
     let mut types_ptr: *const glib::ffi::GType = ptr::null();
     let mut num_types: c_int = 0;
-    unsafe { nuvolo_nautilus::nautilus_module_list_types(&mut types_ptr, &mut num_types) };
+    unsafe { rclover_nautilus::nautilus_module_list_types(&mut types_ptr, &mut num_types) };
     assert_eq!(num_types, 1);
     let provider_type = unsafe { *types_ptr };
 
@@ -342,7 +342,7 @@ fn e2e_async_emblems_cache_cancel_and_invalidation() {
         let update_fn = (*iface_ptr).update_file_info.expect("update_file_info");
         let cancel_fn = (*iface_ptr).cancel_update.expect("cancel_update");
 
-        // 1. Cold lookup for file_a: returns IN_PROGRESS, completes async with "nuvolo-pinned".
+        // 1. Cold lookup for file_a: returns IN_PROGRESS, completes async with "rclover-pinned".
         let fi_a = FakeFile::new(&file_a, false);
         let cb_state = Box::new(CallbackState {
             called: Cell::new(false),
@@ -370,7 +370,7 @@ fn e2e_async_emblems_cache_cancel_and_invalidation() {
         }
         assert!(cb_state.called.get(), "async completion callback must fire");
         assert_eq!(cb_state.result.get(), NAUTILUS_OPERATION_COMPLETE);
-        assert_eq!(fi_a.emblems(), vec!["nuvolo-pinned".to_owned()]);
+        assert_eq!(fi_a.emblems(), vec!["rclover-pinned".to_owned()]);
         assert_eq!(mounts_calls.get(), 1, "GetMounts called once");
         assert_eq!(states_calls.get(), 1, "GetStatesWithTypes called once");
 
@@ -380,7 +380,7 @@ fn e2e_async_emblems_cache_cancel_and_invalidation() {
         let mut handle2: *mut NautilusOperationHandle = ptr::null_mut();
         let res2 = update_fn(provider, fi_a2.as_nautilus_ptr(), closure2, &mut handle2);
         assert_eq!(res2, NAUTILUS_OPERATION_COMPLETE, "cached lookup must complete immediately");
-        assert_eq!(fi_a2.emblems(), vec!["nuvolo-pinned".to_owned()]);
+        assert_eq!(fi_a2.emblems(), vec!["rclover-pinned".to_owned()]);
         glib::gobject_ffi::g_closure_unref(closure2);
         assert_eq!(states_calls.get(), 1, "no D-Bus call on cache hit");
 
@@ -438,7 +438,7 @@ fn e2e_async_emblems_cache_cancel_and_invalidation() {
             tid3.remove();
         }
         assert!(cb_state3.called.get());
-        assert_eq!(fi_a3.emblems(), vec!["nuvolo-pinned".to_owned()]);
+        assert_eq!(fi_a3.emblems(), vec!["rclover-pinned".to_owned()]);
         assert_eq!(states_calls.get(), 2, "StatesChanged triggered a fresh GetStatesWithTypes call");
 
         glib::gobject_ffi::g_object_unref(provider_obj.cast());

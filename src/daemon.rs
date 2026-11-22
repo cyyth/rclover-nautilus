@@ -1,4 +1,4 @@
-//! Client side of the Nuvolo D-Bus interface (contract: nuvolo-sync docs/dbus.rst).
+//! Client side of the rclover D-Bus interface (contract: rclover-sync docs/dbus.rst).
 
 use crate::ffi;
 use crate::nautilus::emblem;
@@ -11,15 +11,15 @@ use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-const BUS: &str = "io.github.cyythanapong_netizen.Nuvolo";
-const PATH: &str = "/io/github/cyythanapong_netizen/Nuvolo";
-const IFACE: &str = "io.github.cyythanapong_netizen.Nuvolo1";
+const BUS: &str = "io.github.cyythanapong_netizen.Rclover";
+const PATH: &str = "/io/github/cyythanapong_netizen/Rclover";
+const IFACE: &str = "io.github.cyythanapong_netizen.Rclover1";
 /// Short timeout for synchronous context-menu fallback lookups.
 const SYNC_QUERY_TIMEOUT_MS: i32 = 300;
 /// Generous timeout for non-blocking async D-Bus lookups.
 const ASYNC_QUERY_TIMEOUT_MS: i32 = 5_000;
 const MOUNTS_TTL: Duration = Duration::from_secs(30);
-/// Short cache when Nuvolo is not running so we notice promptly once it starts.
+/// Short cache when rclover is not running so we notice promptly once it starts.
 const NO_DAEMON_TTL: Duration = Duration::from_secs(3);
 const STATE_TTL: Duration = Duration::from_secs(60);
 const MAX_RETRIES: u32 = 3;
@@ -31,7 +31,7 @@ enum MountCache {
     Unknown,
     /// Fetched successfully (may be empty if no accounts configured).
     Known(Instant, Vec<PathBuf>),
-    /// Nuvolo daemon is not currently running on the bus; re-check after [`NO_DAEMON_TTL`].
+    /// rclover daemon is not currently running on the bus; re-check after [`NO_DAEMON_TTL`].
     Absent(Instant),
 }
 
@@ -177,7 +177,7 @@ impl Daemon {
             .ok()
     }
 
-    /// Whether `path` is inside a Nuvolo mount (for synchronous context-menu checks).
+    /// Whether `path` is inside an rclover mount (for synchronous context-menu checks).
     /// Never caches a transient failure as an empty mount list for 30 s.
     pub fn inside(&self, path: &Path) -> bool {
         let Ok(mut cache) = self.mounts.try_borrow_mut() else { return false };
@@ -454,7 +454,7 @@ impl Daemon {
                 }
             }
             Err(e) if e.message().contains("UnknownMethod") => {
-                // Older nuvolo-sync without GetStatesWithTypes: fall back to async GetDirStates.
+                // Older rclover-sync without GetStatesWithTypes: fall back to async GetDirStates.
                 self.fallback_dir_states(ids);
             }
             Err(_) => {
@@ -555,13 +555,13 @@ impl Daemon {
         out
     }
 
-    /// Fire-and-forget action call; this one may start Nuvolo.
+    /// Fire-and-forget action call; this one may start rclover.
     pub fn act(&self, method: &str, args: glib::Variant) {
         let Some(c) = &self.conn else { return };
         let method_name = method.to_owned();
         c.call(Some(BUS), PATH, IFACE, method, Some(&args), None, gio::DBusCallFlags::NONE, -1, None::<&gio::Cancellable>, move |res| {
             if let Err(e) = res {
-                eprintln!("nuvolo-nautilus: {method_name}: {e}");
+                eprintln!("rclover-nautilus: {method_name}: {e}");
             }
         });
     }
@@ -572,8 +572,8 @@ impl Daemon {
         c.call(Some(BUS), PATH, IFACE, method, Some(&(path,).to_variant()), None, gio::DBusCallFlags::NONE, 30_000, None::<&gio::Cancellable>, move |res| {
             match res.map(|v| v.get::<(String,)>()) {
                 Ok(Some((url,))) => crate::guard((), move || done(url)),
-                Ok(None) => eprintln!("nuvolo-nautilus: unexpected reply"),
-                Err(e) => eprintln!("nuvolo-nautilus: {e}"),
+                Ok(None) => eprintln!("rclover-nautilus: unexpected reply"),
+                Err(e) => eprintln!("rclover-nautilus: {e}"),
             }
         });
     }

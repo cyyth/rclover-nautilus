@@ -1,11 +1,11 @@
 %global debug_package %{nil}
 
-Name:           nuvolo-nautilus
-Version:        0.1.4
+Name:           rclover-nautilus
+Version:        0.2.0
 Release:        1%{?dist}
-Summary:        GNOME Files extension for Nuvolo
+Summary:        GNOME Files extension for rclover
 License:        GPL-3.0-or-later
-URL:            https://github.com/cyythanapong-netizen/nuvolo-nautilus
+URL:            https://github.com/cyythanapong-netizen/rclover-nautilus
 Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  cargo
@@ -14,10 +14,13 @@ BuildRequires:  make
 BuildRequires:  pkgconfig(libnautilus-extension-4)
 BuildRequires:  pkgconfig(gtk4)
 Requires:       nautilus
-Requires:       nuvolo
+Requires:       rclover
+# Formerly nuvolo-nautilus: replaces it on upgrade.
+Provides:       nuvolo-nautilus = %{version}-%{release}
+Obsoletes:      nuvolo-nautilus < 0.2.0
 
 %description
-Shows Nuvolo sync emblems on files in cloud drives and adds a Nuvolo menu to the
+Shows rclover sync emblems on files in cloud drives and adds an rclover menu to the
 GNOME Files context menu: keep on device, free local cache, sync now, copy a share
 link and open in the browser.
 
@@ -33,10 +36,13 @@ make install DESTDIR=%{buildroot} EXTDIR=%{_libdir}/nautilus/extensions-4 ICONDI
 %files
 %license LICENSE
 %doc README.md
-%{_libdir}/nautilus/extensions-4/libnuvolo-nautilus.so
-%{_datadir}/icons/hicolor/scalable/emblems/emblem-nuvolo-*.svg
+%{_libdir}/nautilus/extensions-4/librclover-nautilus.so
+%{_datadir}/icons/hicolor/scalable/emblems/emblem-rclover-*.svg
 
 %changelog
+* Sun Nov 22 2026 Thanapong Chuangyanyong - 0.2.0-1
+- Renamed from nuvolo-nautilus to rclover-nautilus (rclone + clover)
+
 * Sun Nov 22 2026 Thanapong Chuangyanyong - 0.1.4-1
 - One RPM for Fedora 44 and newer
 

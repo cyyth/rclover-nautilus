@@ -26,11 +26,11 @@ jobs:
       - name: Build RPM
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          version=$(rpmspec -q --srpm --qf '%{version}' nuvolo-nautilus.spec)
-          name=$(rpmspec -q --srpm --qf '%{name}' nuvolo-nautilus.spec)
+          version=$(rpmspec -q --srpm --qf '%{version}' rclover-nautilus.spec)
+          name=$(rpmspec -q --srpm --qf '%{name}' rclover-nautilus.spec)
           mkdir -p ~/rpmbuild/SOURCES dist
-          git archive --format=tar.gz --prefix=nuvolo-nautilus-$version/ -o ~/rpmbuild/SOURCES/$name-$version.tar.gz HEAD
-          rpmbuild -ba --define 'dist %{nil}' nuvolo-nautilus.spec
+          git archive --format=tar.gz --prefix=rclover-nautilus-$version/ -o ~/rpmbuild/SOURCES/$name-$version.tar.gz HEAD
+          rpmbuild -ba --define 'dist %{nil}' rclover-nautilus.spec
           cp ~/rpmbuild/RPMS/*/*.rpm ~/rpmbuild/SRPMS/*.rpm dist/
 
       - uses: actions/upload-artifact@v4
@@ -51,14 +51,14 @@ jobs:
           name: rpms
           path: dist
 
-      # "nuvolo" (nuvolo-sync) is not in Fedora's repositories: install every other
+      # "rclover" (rclover-sync) is not in Fedora's repositories: install every other
       # requirement, then the package itself, and check that all its libraries load.
       - name: Install on Fedora ${{ matrix.fedora }}
         run: |
           rpm=$(ls dist/*.rpm | grep -v '\.src\.rpm$')
-          dnf install -y $(rpm -qp --requires $rpm | grep -v -e '^nuvolo$' -e '^rpmlib' -e '^rtld' | sed 's/ .*//')
+          dnf install -y $(rpm -qp --requires $rpm | grep -v -e '^rclover$' -e '^rpmlib' -e '^rtld' | sed 's/ .*//')
           rpm -i --nodeps --nosignature $rpm
-          ! rpm -ql nuvolo-nautilus | grep '\.so$' | xargs ldd | grep 'not found'
+          ! rpm -ql rclover-nautilus | grep '\.so$' | xargs ldd | grep 'not found'
 
   release:
     needs: install
