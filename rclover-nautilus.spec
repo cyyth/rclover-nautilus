@@ -1,8 +1,8 @@
 %global debug_package %{nil}
 
 Name:           rclover-nautilus
-Version:        0.1.4
-Release:        2%{?dist}
+Version:        0.2.0
+Release:        1%{?dist}
 Summary:        GNOME Files extension for rclover
 License:        GPL-3.0-or-later
 URL:            https://github.com/cyythanapong-netizen/rclover-nautilus
@@ -17,7 +17,7 @@ Requires:       nautilus
 Requires:       rclover
 # Formerly nuvolo-nautilus: replaces it on upgrade.
 Provides:       nuvolo-nautilus = %{version}-%{release}
-Obsoletes:      nuvolo-nautilus < 0.1.4-2
+Obsoletes:      nuvolo-nautilus < 0.2.0
 
 %description
 Shows rclover sync emblems on files in cloud drives and adds an rclover menu to the
@@ -40,7 +40,7 @@ make install DESTDIR=%{buildroot} EXTDIR=%{_libdir}/nautilus/extensions-4 ICONDI
 %{_datadir}/icons/hicolor/scalable/emblems/emblem-rclover-*.svg
 
 %changelog
-* Sun Nov 22 2026 Thanapong Chuangyanyong - 0.1.4-2
+* Sun Nov 22 2026 Thanapong Chuangyanyong - 0.2.0-1
 - Renamed from nuvolo-nautilus to rclover-nautilus (rclone + clover)
 
 * Sun Nov 22 2026 Thanapong Chuangyanyong - 0.1.4-1
