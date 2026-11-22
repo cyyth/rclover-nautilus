@@ -1,7 +1,7 @@
 %global debug_package %{nil}
 
 Name:           nuvolo-nautilus
-Version:        0.1.3
+Version:        0.1.4
 Release:        1%{?dist}
 Summary:        GNOME Files extension for Nuvolo
 License:        GPL-3.0-or-later
@@ -37,6 +37,9 @@ make install DESTDIR=%{buildroot} EXTDIR=%{_libdir}/nautilus/extensions-4 ICONDI
 %{_datadir}/icons/hicolor/scalable/emblems/emblem-nuvolo-*.svg
 
 %changelog
+* Sun Nov 22 2026 Thanapong Chuangyanyong - 0.1.4-1
+- One RPM for Fedora 44 and newer
+
 * Fri Nov 20 2026 Thanapong Chuangyanyong - 0.1.3-1
 - Fix GNOME Files crashing on open: stop calling g_closure_sink on Nautilus's
   update_complete closure (which stole Nautilus's floating reference and caused a double-free)
