@@ -129,6 +129,11 @@ pub struct Daemon {
     batch_scheduled: Cell<bool>,
     /// Retry count per path after transient failures/timeouts.
     retries: RefCell<HashMap<PathBuf, u32>>,
+    /// Per folder: where it really is, if it leads into a mount through symlinks.
+    links: RefCell<HashMap<PathBuf, (Instant, Option<PathBuf>)>>,
+    /// Symlinks seen leading into a mount, and where they lead (`~/Documents`,
+    /// `~/Cloud/gdrive/Documents`), so a change there also refreshes what is shown through them.
+    aliases: RefCell<Vec<(PathBuf, PathBuf)>>,
 }
 
 thread_local! {
@@ -159,6 +164,8 @@ impl Daemon {
             queued_batch: RefCell::new(Vec::new()),
             batch_scheduled: Cell::new(false),
             retries: RefCell::new(HashMap::new()),
+            links: RefCell::new(HashMap::new()),
+            aliases: RefCell::new(Vec::new()),
         }
     }
 
@@ -177,14 +184,15 @@ impl Daemon {
             .ok()
     }
 
-    /// Whether `path` is inside an rclover mount (for synchronous context-menu checks).
-    /// Never caches a transient failure as an empty mount list for 30 s.
-    pub fn inside(&self, path: &Path) -> bool {
-        let Ok(mut cache) = self.mounts.try_borrow_mut() else { return false };
+    /// Where `path` is inside an rclover mount, following symlinks such as a home folder linked
+    /// into the drive; `None` if it is not in one (for synchronous context-menu checks). Never
+    /// caches a transient failure as an empty mount list for 30 s.
+    pub fn real(&self, path: &Path) -> Option<PathBuf> {
+        let Ok(mut cache) = self.mounts.try_borrow_mut() else { return None };
         if let Some(roots) = cache.roots_if_fresh() {
-            return roots.iter().any(|root| path.starts_with(root));
+            return self.real_in(path, roots);
         }
-        let Some(conn) = &self.conn else { return false };
+        let Some(conn) = &self.conn else { return None };
         match conn.call_sync(
             Some(BUS),
             PATH,
@@ -201,20 +209,64 @@ impl Daemon {
                     .get::<(Vec<String>,)>()
                     .map(|t| t.0.into_iter().map(PathBuf::from).collect())
                     .unwrap_or_default();
-                let hit = roots.iter().any(|root| path.starts_with(root));
+                let real = self.real_in(path, &roots);
                 *cache = MountCache::Known(Instant::now(), roots);
-                hit
+                real
             }
             Err(e) if is_service_absent(&e) => {
                 *cache = MountCache::Absent(Instant::now());
-                false
+                None
             }
             Err(_) => {
                 // Transient timeout/error: do not poison the cache for 30 s.
                 *cache = MountCache::Unknown;
-                false
+                None
             }
         }
+    }
+
+    /// Where `path` is inside one of `roots`, through symlinks if need be. Links are followed
+    /// only up to a mount, so this never waits on the mount itself, and once per folder for
+    /// [`MOUNTS_TTL`]; the file itself costs one `lstat` when it is not in a mount.
+    fn real_in(&self, path: &Path, roots: &[PathBuf]) -> Option<PathBuf> {
+        let inside = |p: &Path| roots.iter().any(|r| p.starts_with(r));
+        if inside(path) {
+            return Some(path.to_path_buf());
+        }
+        let follow = |p: &Path| {
+            let (real, link, target) = follow_links(p, roots)?;
+            let mut aliases = self.aliases.borrow_mut();
+            if !aliases.iter().any(|(l, _)| *l == link) {
+                aliases.push((link, target));
+            }
+            Some(real)
+        };
+        if let (Some(dir), Some(name)) = (path.parent(), path.file_name()) {
+            let cached = self.links.borrow().get(dir).filter(|(t, _)| t.elapsed() < MOUNTS_TTL).map(|(_, r)| r.clone());
+            let dir_real = cached.unwrap_or_else(|| {
+                let r = follow(dir);
+                self.links.borrow_mut().insert(dir.to_path_buf(), (Instant::now(), r.clone()));
+                r
+            });
+            if let Some(d) = dir_real {
+                return Some(d.join(name));
+            }
+        }
+        // The file itself may be the link (~/Documents, seen from ~).
+        std::fs::symlink_metadata(path).ok().filter(|m| m.file_type().is_symlink()).and_then(|_| follow(path))
+    }
+
+    /// The paths Nautilus may show for `real`: itself, and the same place through each known
+    /// symlink, with their folders up to the link.
+    fn shown_paths(&self, real: &Path) -> Vec<PathBuf> {
+        let mut out = vec![real.to_path_buf()];
+        for (link, target) in self.aliases.borrow().iter() {
+            if let Ok(rest) = real.strip_prefix(target) {
+                let shown = link.join(rest);
+                out.extend(shown.ancestors().take_while(|a| a.starts_with(link)).map(Path::to_path_buf));
+            }
+        }
+        out
     }
 
     /// Looks up a fresh cached state without performing any D-Bus I/O.
@@ -241,11 +293,11 @@ impl Daemon {
         // Check mount cache without blocking.
         let mount_decision = {
             let Ok(cache) = self.mounts.try_borrow() else { return None };
-            cache.roots_if_fresh().map(|roots| roots.iter().any(|r| path.starts_with(r)))
+            cache.roots_if_fresh().map(|roots| self.real_in(&path, roots))
         };
         match mount_decision {
-            Some(false) => None, // known to be outside every mount
-            Some(true) => {
+            Some(None) => None, // known to be outside every mount
+            Some(Some(path)) => {
                 if let Some(state) = self.cached_state(&path) {
                     if let Some(e) = emblem(&state) {
                         if let Ok(cstr) = CString::new(e) {
@@ -324,12 +376,16 @@ impl Daemon {
                 {
                     let mut pending = self.pending.borrow_mut();
                     for id in waiting {
-                        let Some(op) = pending.get(&id) else { continue };
-                        if !roots.iter().any(|r| op.path.starts_with(r)) {
+                        let Some(op) = pending.get_mut(&id) else { continue };
+                        if let Some(real) = self.real_in(&op.path, &roots) {
+                            op.path = real;
+                        } else {
                             if let Some(op) = pending.remove(&id) {
                                 to_complete.push((op, None));
                             }
-                        } else if let Some(state) = self.cached_state(&op.path) {
+                            continue;
+                        }
+                        if let Some(state) = self.cached_state(&op.path) {
                             if let Some(op) = pending.remove(&id) {
                                 to_complete.push((op, Some(state)));
                             }
@@ -593,7 +649,7 @@ impl Daemon {
                 for a in Path::new(p).ancestors().take_while(|a| roots.iter().any(|r| a.starts_with(r))) {
                     states.remove(a);
                     retries.remove(a);
-                    uris.push(gio::File::for_path(a).uri().to_string());
+                    uris.extend(self.shown_paths(a).iter().map(|s| gio::File::for_path(s).uri().to_string()));
                 }
             }
         }
@@ -619,6 +675,49 @@ fn invalidate_uris(uris: Vec<String>) {
     }
 }
 
+/// Follows the symlinks in `path` until it is inside one of `roots`: the real path, the first
+/// link, and where that link leads. `None` if no link leads into a mount. Gives up after 8 links
+/// (a loop).
+fn follow_links(path: &Path, roots: &[PathBuf]) -> Option<(PathBuf, PathBuf, PathBuf)> {
+    let inside = |p: &Path| roots.iter().any(|r| p.starts_with(r));
+    let mut cur = path.to_path_buf();
+    let mut first: Option<PathBuf> = None;
+    for _ in 0..8 {
+        if inside(&cur) {
+            let link = first?;
+            // The link's own real path: `cur` without the part of `path` after the link.
+            let rest = path.strip_prefix(&link).ok()?.components().count();
+            let target = cur.ancestors().nth(rest)?.to_path_buf();
+            return Some((cur, link, target));
+        }
+        let mut prefix = PathBuf::new();
+        let link = cur.components().find_map(|c| {
+            prefix.push(c);
+            std::fs::symlink_metadata(&prefix).ok().filter(|m| m.file_type().is_symlink()).map(|_| prefix.clone())
+        })?;
+        let to = std::fs::read_link(&link).ok()?;
+        let target = normalize(&link.parent().unwrap_or(Path::new("/")).join(to));
+        first.get_or_insert_with(|| link.clone()); // the first pass looks at `path` itself
+        cur = target.join(cur.strip_prefix(&link).ok()?);
+    }
+    None
+}
+
+/// `a/b/../c` → `a/c`, without touching the disk.
+fn normalize(p: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            std::path::Component::CurDir => {}
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 fn is_service_absent(err: &glib::Error) -> bool {
     let msg = err.message();
     msg.contains("ServiceUnknown") || msg.contains("NameHasNoOwner")
@@ -640,6 +739,8 @@ mod tests {
             queued_batch: RefCell::new(Vec::new()),
             batch_scheduled: Cell::new(false),
             retries: RefCell::new(HashMap::new()),
+            links: RefCell::new(HashMap::new()),
+            aliases: RefCell::new(Vec::new()),
         };
         d.states
             .borrow_mut()
@@ -657,10 +758,40 @@ mod tests {
     #[test]
     fn state_comes_from_the_cache_and_checks_mounts() {
         let d = offline();
-        assert!(d.inside(Path::new("/mnt/cloud/a.txt")));
-        assert!(!d.inside(Path::new("/elsewhere/a.txt")));
+        assert_eq!(d.real(Path::new("/mnt/cloud/a.txt")), Some(PathBuf::from("/mnt/cloud/a.txt")));
+        assert_eq!(d.real(Path::new("/elsewhere/a.txt")), None);
         assert_eq!(d.cached_state(Path::new("/mnt/cloud/a.txt")).as_deref(), Some("cached"));
         assert_eq!(d.cached_state(Path::new("/mnt/cloud/missing.txt")), None);
+    }
+
+    #[test]
+    fn files_shown_through_a_symlinked_folder_are_in_the_drive() {
+        let root = std::env::temp_dir().join(format!("rclover-nautilus-links-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (home, mount) = (root.join("home"), root.join("Cloud/gdrive"));
+        std::fs::create_dir_all(mount.join("Documents/sub")).unwrap();
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(root.join("Downloads")).unwrap();
+        // ~/Documents -> ../Cloud/gdrive/Documents (relative), ~/Docs -> ~/Documents (a chain).
+        std::os::unix::fs::symlink("../Cloud/gdrive/Documents", home.join("Documents")).unwrap();
+        std::os::unix::fs::symlink(home.join("Documents"), home.join("Docs")).unwrap();
+        std::os::unix::fs::symlink(root.join("Downloads"), home.join("Downloads")).unwrap();
+        let d = offline();
+        *d.mounts.borrow_mut() = MountCache::Known(Instant::now(), vec![mount.clone()]);
+
+        assert_eq!(d.real(&home.join("Documents/sub/a.txt")), Some(mount.join("Documents/sub/a.txt")));
+        assert_eq!(d.real(&home.join("Documents")), Some(mount.join("Documents")), "the link itself");
+        assert_eq!(d.real(&home.join("Docs/sub")), Some(mount.join("Documents/sub")), "a chain of links");
+        assert_eq!(d.real(&home.join("Downloads/x.zip")), None, "a link that does not lead into a mount");
+        assert_eq!(d.real(&home.join("plain.txt")), None);
+
+        // A change in the drive refreshes the same files shown through the links.
+        let shown = d.shown_paths(&mount.join("Documents/sub/a.txt"));
+        for p in [home.join("Documents/sub/a.txt"), home.join("Documents/sub"), home.join("Documents"), home.join("Docs/sub/a.txt")] {
+            assert!(shown.contains(&p), "{} not in {shown:?}", p.display());
+        }
+        assert!(!shown.contains(&home), "nothing above the link");
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

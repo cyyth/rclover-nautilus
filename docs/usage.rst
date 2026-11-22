@@ -15,6 +15,10 @@ Sync (blue)    Uploading or downloading now.
 Warning        The last transfer failed.
 =============  ======================================================
 
+Files reached through a symbolic link into a mount show their emblems and the menu too, for
+example in a home folder moved to the cloud (``~/Documents`` linked to
+``~/Cloud/gdrive/Documents``). Links are followed only up to the mount, once per folder.
+
 Files outside an rclover mount are never touched. If rclover is not running, no emblems are
 shown and browsing is not slowed down. The extension never starts rclover just to look up a
 state.
