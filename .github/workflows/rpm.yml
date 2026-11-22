@@ -57,7 +57,7 @@ jobs:
         run: |
           rpm=$(ls dist/*.rpm | grep -v '\.src\.rpm$')
           dnf install -y $(rpm -qp --requires $rpm | grep -v -e '^nuvolo$' -e '^rpmlib' -e '^rtld' | sed 's/ .*//')
-          rpm -i --nodeps $rpm
+          rpm -i --nodeps --nosignature $rpm
           ! rpm -ql nuvolo-nautilus | grep '\.so$' | xargs ldd | grep 'not found'
 
   release:
