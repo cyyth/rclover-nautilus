@@ -1,7 +1,7 @@
 %global debug_package %{nil}
 
 Name:           rclover-nautilus
-Version:        0.2.0
+Version:        0.2.1
 Release:        1%{?dist}
 Summary:        GNOME Files extension for rclover
 License:        GPL-3.0-or-later
@@ -40,6 +40,10 @@ make install DESTDIR=%{buildroot} EXTDIR=%{_libdir}/nautilus/extensions-4 ICONDI
 %{_datadir}/icons/hicolor/scalable/emblems/emblem-rclover-*.svg
 
 %changelog
+* Sun Nov 22 2026 Thanapong Chuangyanyong - 0.2.1-1
+- Emblems and the rclover menu also for files shown through a link into a drive, such as
+  home folders moved to the cloud (~/Documents)
+
 * Sun Nov 22 2026 Thanapong Chuangyanyong - 0.2.0-1
 - Renamed from nuvolo-nautilus to rclover-nautilus (rclone + clover)
 
