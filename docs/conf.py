@@ -1,5 +1,5 @@
-project = "nuvolo-nautilus"
-copyright = "2026, Nuvolo contributors"
+project = "rclover-nautilus"
+copyright = "2026, rclover contributors"
 release = "0.1.1"
 extensions = []
 exclude_patterns = ["_build"]

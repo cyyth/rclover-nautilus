@@ -4,7 +4,7 @@ Usage
 Emblems
 -------
 
-Inside a Nuvolo mount, each file and folder shows one emblem:
+Inside an rclover mount, each file and folder shows one emblem:
 
 =============  ======================================================
 Cloud          Only in the cloud. Uses no disk space until opened.
@@ -15,14 +15,14 @@ Sync (blue)    Uploading or downloading now.
 Warning        The last transfer failed.
 =============  ======================================================
 
-Files outside a Nuvolo mount are never touched. If Nuvolo is not running, no emblems are
-shown and browsing is not slowed down. The extension never starts Nuvolo just to look up a
+Files outside an rclover mount are never touched. If rclover is not running, no emblems are
+shown and browsing is not slowed down. The extension never starts rclover just to look up a
 state.
 
-The Nuvolo menu
----------------
+The rclover menu
+----------------
 
-Right-click files inside a mount and open **Nuvolo**:
+Right-click files inside a mount and open **rclover**:
 
 Always Keep on Device / Stop Keeping on Device
    Pins or unpins the selection. Pinned files are downloaded right away.
@@ -39,4 +39,4 @@ Copy Share Link
 Open in Browser
    Opens the file in the provider's web interface (one file only).
 
-Unlike state lookups, these actions start Nuvolo if it is not running.
+Unlike state lookups, these actions start rclover if it is not running.

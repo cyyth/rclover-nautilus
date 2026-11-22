@@ -1,7 +1,7 @@
-//! GNOME Files (Nautilus 43+) extension for Nuvolo.
+//! GNOME Files (Nautilus 43+) extension for rclover.
 //!
-//! Adds a sync emblem to every file inside a Nuvolo mount and a "Nuvolo" submenu to the
-//! context menu. All state lives in the Nuvolo app; this extension only asks it over D-Bus.
+//! Adds a sync emblem to every file inside an rclover mount and a "rclover" submenu to the
+//! context menu. All state lives in the rclover app; this extension only asks it over D-Bus.
 
 mod daemon;
 mod ffi;
@@ -17,7 +17,7 @@ static TYPES: OnceLock<[glib::ffi::GType; 1]> = OnceLock::new();
 /// GLib goes through this: a panic must never cross into C, where it aborts GNOME Files.
 pub(crate) fn guard<R>(fallback: R, f: impl FnOnce() -> R) -> R {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).unwrap_or_else(|_| {
-        eprintln!("nuvolo-nautilus: internal error, ignored (please report it)");
+        eprintln!("rclover-nautilus: internal error, ignored (please report it)");
         fallback
     })
 }
