@@ -3,7 +3,7 @@ rclover-nautilus
 
 rclover — rclone + clover
 
-A GNOME Files extension for `rclover <https://github.com/cyythanapong-netizen/rclover-sync>`_.
+A GNOME Files extension for `rclover <https://cyythanapong-netizen.github.io/rclover-sync/>`_.
 It shows what rclover knows about each file in your cloud drives and lets you act on it from
 the right-click menu.
 
@@ -13,3 +13,4 @@ the right-click menu.
    install
    usage
    internals
+   rclover App Docs <https://cyythanapong-netizen.github.io/rclover-sync/>
