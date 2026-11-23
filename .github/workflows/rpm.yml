@@ -60,8 +60,38 @@ jobs:
           rpm -i --nodeps --nosignature $rpm
           ! rpm -ql rclover-nautilus | grep '\.so$' | xargs ldd | grep 'not found'
 
+  deb:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y make cargo libnautilus-extension-dev libgtk-4-dev
+
+      - name: Build .deb
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          make build
+          make install DESTDIR=pkg PREFIX=/usr EXTDIR=/usr/lib/x86_64-linux-gnu/nautilus/extensions-4 ICONDIR=/usr/share/icons/hicolor/scalable/emblems
+          mkdir pkg/DEBIAN dist
+          cat > pkg/DEBIAN/control <<EOF2
+          Package: rclover-nautilus
+          Version: $version
+          Architecture: amd64
+          Maintainer: Thanapong Chuangyanyong
+          Depends: nautilus, rclover
+          Description: Sync emblems and context menu for rclover in GNOME Files
+          EOF2
+          sed -i 's/^ *//' pkg/DEBIAN/control
+          dpkg-deb --root-owner-group --build pkg dist/rclover-nautilus_${version}_amd64.deb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debs
+          path: dist/*.deb
+
   release:
-    needs: install
+    needs: [install, deb]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
@@ -70,7 +100,14 @@ jobs:
           name: rpms
           path: dist
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: debs
+          path: dist
+
       - name: Attach to release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.rpm
+          files: |
+            dist/*.rpm
+            dist/*.deb

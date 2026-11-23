@@ -7,7 +7,7 @@ Requirements
 * GNOME Files (Nautilus) 43 or newer
 * Rust 1.84 or newer
 * ``libnautilus-extension-4`` development files
-* `rclover <https://github.com/cyythanapong-netizen/rclover-sync>`_, installed with its
+* `rclover <https://github.com/cyyth/rclover-sync>`_, installed with its
   D-Bus service file
 
 On Fedora::
