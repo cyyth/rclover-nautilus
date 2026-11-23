@@ -1,11 +1,11 @@
 %global debug_package %{nil}
 
 Name:           rclover-nautilus
-Version:        0.2.1
+Version:        0.2.2
 Release:        1%{?dist}
 Summary:        GNOME Files extension for rclover
 License:        GPL-3.0-or-later
-URL:            https://github.com/cyythanapong-netizen/rclover-nautilus
+URL:            https://github.com/cyyth/rclover-nautilus
 Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  cargo
@@ -40,6 +40,9 @@ make install DESTDIR=%{buildroot} EXTDIR=%{_libdir}/nautilus/extensions-4 ICONDI
 %{_datadir}/icons/hicolor/scalable/emblems/emblem-rclover-*.svg
 
 %changelog
+* Mon Nov 23 2026 Thanapong Chuangyanyong - 0.2.2-1
+- .deb package for Debian and Ubuntu next to the RPM; docs logo fixed
+
 * Sun Nov 22 2026 Thanapong Chuangyanyong - 0.2.1-1
 - Emblems and the rclover menu also for files shown through a link into a drive, such as
   home folders moved to the cloud (~/Documents)
